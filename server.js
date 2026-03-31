@@ -16,6 +16,48 @@ app.post('/api/crawl', async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: 'URL이 필요합니다.' });
 
+    // 네이버 스마트스토어 전용 처리
+    const smartstoreMatch = url.match(/smartstore\.naver\.com\/([^/]+)\/products\/(\d+)/);
+    if (smartstoreMatch) {
+      const productId = smartstoreMatch[2];
+      try {
+        const apiRes = await fetch(
+          `https://smartstore.naver.com/i/v1/contents/products/${productId}`,
+          {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'Accept': 'application/json',
+              'Referer': url
+            }
+          }
+        );
+        if (apiRes.ok) {
+          const data = await apiRes.json();
+          const p = data.product || data;
+          const productText = [
+            p.name && `상품명: ${p.name}`,
+            p.category && `카테고리: ${typeof p.category === 'object' ? (p.category.wholeCategoryName || JSON.stringify(p.category)) : p.category}`,
+            p.salePrice && `가격: ${p.salePrice}원`,
+            p.productInfoProvidedNotice && `상품정보: ${JSON.stringify(p.productInfoProvidedNotice).substring(0, 1500)}`,
+            p.detailAttribute && `속성: ${JSON.stringify(p.detailAttribute).substring(0, 1500)}`,
+            p.naverShoppingSearchInfo && `검색정보: ${JSON.stringify(p.naverShoppingSearchInfo)}`,
+            p.tags && `태그: ${Array.isArray(p.tags) ? p.tags.join(', ') : p.tags}`
+          ].filter(Boolean).join('\n');
+
+          return res.json({
+            productText,
+            info: { title: p.name || '', description: '', price: p.salePrice || '', category: '' }
+          });
+        }
+      } catch (e) {
+        console.error('스마트스토어 API 실패, 일반 크롤링 시도:', e.message);
+      }
+    }
+
+    // 네이버 쇼핑 상품 (shopping.naver.com)
+    const shoppingMatch = url.match(/shopping\.naver\.com\/.*?[\?&]?(?:nvMid=|products\/)(\d+)/);
+
+    // 일반 크롤링
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -32,7 +74,6 @@ app.post('/api/crawl', async (req, res) => {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // 다양한 쇼핑몰에서 상품 정보 추출
     const info = {
       title: '',
       description: '',
@@ -41,33 +82,27 @@ app.post('/api/crawl', async (req, res) => {
       details: ''
     };
 
-    // 제목 추출
     info.title = $('meta[property="og:title"]').attr('content')
       || $('meta[name="title"]').attr('content')
       || $('title').text()
       || '';
 
-    // 설명 추출
     info.description = $('meta[property="og:description"]').attr('content')
       || $('meta[name="description"]').attr('content')
       || '';
 
-    // 가격 추출
     info.price = $('meta[property="product:price:amount"]').attr('content')
       || $('[class*="price"]').first().text().trim()
       || '';
 
-    // 카테고리 추출
     info.category = $('meta[property="product:category"]').attr('content')
       || $('[class*="category"]').first().text().trim()
       || '';
 
-    // 상품 상세 텍스트 추출 (본문에서 텍스트만)
     $('script, style, nav, header, footer').remove();
     const bodyText = $('body').text().replace(/\s+/g, ' ').trim().substring(0, 3000);
     info.details = bodyText;
 
-    // 키워드 메타태그
     const keywords = $('meta[name="keywords"]').attr('content') || '';
 
     const productText = [
