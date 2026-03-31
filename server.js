@@ -285,7 +285,7 @@ app.post('/api/search-volume', async (req, res) => {
       const sig = generateSignature(ts, 'GET', apiUrl, secretKey);
 
       const naverRes = await fetch(
-        `https://api.naver.com/keywordstool?${params.toString()}`,
+        `https://api.searchad.naver.com/keywordstool?${params.toString()}`,
         {
           method: 'GET',
           headers: {
