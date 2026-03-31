@@ -832,7 +832,7 @@
           <div id="uploadPrompt">
             <div class="upload-icon">📦</div>
             <h3>이미지를 드래그하거나 클릭하여 업로드</h3>
-            <p>JPG, PNG, WEBP 지원 · 최대 10MB</p>
+            <p>JPG, PNG, WEBP 지원 · 최대 10MB · 캡쳐 후 Ctrl+V 붙여넣기 가능</p>
           </div>
           <img id="previewImg" class="preview-img" alt="상품 미리보기">
         </div>
@@ -1053,6 +1053,25 @@
       };
       reader.readAsDataURL(file);
     }
+
+    // ─── 클립보드 붙여넣기 (캡쳐 후 Ctrl+V) ─────────────────────────────────
+    document.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (file) {
+            // 이미지 탭으로 자동 전환
+            if (currentTab !== 'image') switchTab('image');
+            processFile(file);
+            showToast('📋 캡쳐 이미지 붙여넣기 완료!');
+          }
+          break;
+        }
+      }
+    });
 
     // ─── OPTIONS ──────────────────────────────────────────────────────────────
     function toggleOption(id) {
