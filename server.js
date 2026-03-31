@@ -20,37 +20,132 @@ app.post('/api/crawl', async (req, res) => {
     const smartstoreMatch = url.match(/smartstore\.naver\.com\/([^/]+)\/products\/(\d+)/);
     if (smartstoreMatch) {
       const productId = smartstoreMatch[2];
+      const storeName = smartstoreMatch[1];
+
+      // 방법 1: 네이버 쇼핑 상품 API
       try {
         const apiRes = await fetch(
-          `https://smartstore.naver.com/i/v1/contents/products/${productId}`,
+          `https://shopping.naver.com/shopv/api/catalog/product/${productId}`,
           {
             headers: {
               'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
               'Accept': 'application/json',
-              'Referer': url
+              'Referer': `https://shopping.naver.com/`
             }
           }
         );
         if (apiRes.ok) {
           const data = await apiRes.json();
-          const p = data.product || data;
+          const p = data.product || data.catalogProduct || data;
           const productText = [
             p.name && `상품명: ${p.name}`,
-            p.category && `카테고리: ${typeof p.category === 'object' ? (p.category.wholeCategoryName || JSON.stringify(p.category)) : p.category}`,
+            p.productName && `상품명: ${p.productName}`,
+            p.category && `카테고리: ${typeof p.category === 'object' ? (p.category.wholeCategoryName || p.category.categoryName || JSON.stringify(p.category)) : p.category}`,
             p.salePrice && `가격: ${p.salePrice}원`,
-            p.productInfoProvidedNotice && `상품정보: ${JSON.stringify(p.productInfoProvidedNotice).substring(0, 1500)}`,
-            p.detailAttribute && `속성: ${JSON.stringify(p.detailAttribute).substring(0, 1500)}`,
-            p.naverShoppingSearchInfo && `검색정보: ${JSON.stringify(p.naverShoppingSearchInfo)}`,
-            p.tags && `태그: ${Array.isArray(p.tags) ? p.tags.join(', ') : p.tags}`
+            p.price && `가격: ${p.price}원`,
           ].filter(Boolean).join('\n');
 
-          return res.json({
-            productText,
-            info: { title: p.name || '', description: '', price: p.salePrice || '', category: '' }
-          });
+          if (productText.length > 10) {
+            return res.json({
+              productText,
+              info: { title: p.name || p.productName || '', description: '', price: p.salePrice || p.price || '', category: '' }
+            });
+          }
         }
       } catch (e) {
-        console.error('스마트스토어 API 실패, 일반 크롤링 시도:', e.message);
+        console.error('네이버 쇼핑 API 실패:', e.message);
+      }
+
+      // 방법 2: 스마트스토어 내부 API (여러 엔드포인트 시도)
+      const apiUrls = [
+        `https://smartstore.naver.com/i/v1/contents/products/${productId}`,
+        `https://m.smartstore.naver.com/i/v1/contents/products/${productId}`,
+      ];
+
+      for (const apiUrl of apiUrls) {
+        try {
+          const apiRes = await fetch(apiUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+              'Accept': 'application/json',
+              'Referer': url
+            }
+          });
+          if (apiRes.ok) {
+            const data = await apiRes.json();
+            const p = data.product || data;
+            const productText = [
+              p.name && `상품명: ${p.name}`,
+              p.category && `카테고리: ${typeof p.category === 'object' ? (p.category.wholeCategoryName || JSON.stringify(p.category)) : p.category}`,
+              p.salePrice && `가격: ${p.salePrice}원`,
+              p.productInfoProvidedNotice && `상품정보: ${JSON.stringify(p.productInfoProvidedNotice).substring(0, 1500)}`,
+              p.detailAttribute && `속성: ${JSON.stringify(p.detailAttribute).substring(0, 1500)}`,
+              p.naverShoppingSearchInfo && `검색정보: ${JSON.stringify(p.naverShoppingSearchInfo)}`,
+              p.tags && `태그: ${Array.isArray(p.tags) ? p.tags.join(', ') : p.tags}`
+            ].filter(Boolean).join('\n');
+
+            if (productText.length > 10) {
+              return res.json({
+                productText,
+                info: { title: p.name || '', description: '', price: p.salePrice || '', category: '' }
+              });
+            }
+          }
+        } catch (e) {
+          console.error(`API ${apiUrl} 실패:`, e.message);
+        }
+      }
+
+      // 방법 3: 모바일 페이지 크롤링 (차단 우회)
+      try {
+        const mobileRes = await fetch(`https://m.smartstore.naver.com/${storeName}/products/${productId}`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ko-KR,ko;q=0.9'
+          }
+        });
+        if (mobileRes.ok) {
+          const html = await mobileRes.text();
+          const $ = cheerio.load(html);
+
+          // script 태그에서 __NEXT_DATA__ 또는 상품 JSON 추출
+          let productData = null;
+          $('script').each((i, el) => {
+            const text = $(el).html() || '';
+            if (text.includes('__NEXT_DATA__')) {
+              try {
+                const match = text.match(/__NEXT_DATA__\s*=\s*(\{[\s\S]*?\})\s*;?\s*<\/script/);
+                if (match) productData = JSON.parse(match[1]);
+              } catch(e) {}
+            }
+            if (text.includes('"product"') && text.includes('"name"')) {
+              try {
+                const jsonMatch = text.match(/\{[\s\S]*"product"[\s\S]*"name"[\s\S]*\}/);
+                if (jsonMatch) productData = JSON.parse(jsonMatch[0]);
+              } catch(e) {}
+            }
+          });
+
+          const title = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
+          const desc = $('meta[property="og:description"]').attr('content') || '';
+          const keywords = $('meta[name="keywords"]').attr('content') || '';
+
+          if (title) {
+            const productText = [
+              `상품명: ${title}`,
+              desc && `설명: ${desc}`,
+              keywords && `키워드: ${keywords}`,
+            ].filter(Boolean).join('\n');
+
+            return res.json({
+              productText,
+              info: { title, description: desc, price: '', category: '' }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('모바일 크롤링 실패:', e.message);
       }
     }
 
