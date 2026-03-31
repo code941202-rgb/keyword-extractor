@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>스마트스토어 키워드 추출기 | AI 자동 분석</title>
+  <meta name="description" content="상품 이미지나 URL을 입력하면 AI가 실검색율 높은 키워드를 자동으로 추출해 드립니다.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #0f1628;
+      --bg-card: rgba(255, 255, 255, 0.03);
+      --bg-card-hover: rgba(255, 255, 255, 0.06);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-bright: rgba(255, 255, 255, 0.15);
+      --accent-green: #00d084;
+      --accent-green-dim: rgba(0, 208, 132, 0.15);
+      --accent-blue: #3b82f6;
+      --accent-blue-dim: rgba(59, 130, 246, 0.15);
+      --accent-purple: #8b5cf6;
+      --accent-orange: #f59e0b;
+      --text-primary: #f0f4ff;
+      --text-secondary: #8899bb;
+      --text-muted: #4a5a7a;
+      --naver-green: #03C75A;
+      --gradient-main: linear-gradient(135deg, #00d084 0%, #3b82f6 50%, #8b5cf6 100%);
+      --gradient-card: linear-gradient(135deg, rgba(0,208,132,0.1) 0%, rgba(59,130,246,0.05) 100%);
+      --shadow-glow: 0 0 40px rgba(0, 208, 132, 0.15);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Noto Sans KR', 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* BG Orbs */
+    .bg-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.12;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .bg-orb-1 { width: 600px; height: 600px; background: #00d084; top: -200px; left: -200px; }
+    .bg-orb-2 { width: 500px; height: 500px; background: #3b82f6; bottom: -150px; right: -150px; }
+    .bg-orb-3 { width: 300px; height: 300px; background: #8b5cf6; top: 40%; left: 50%; transform: translateX(-50%); }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 48px;
+      animation: fadeInDown 0.6s ease;
+    }
+    .header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-green-dim);
+      border: 1px solid rgba(0,208,132,0.3);
+      color: var(--accent-green);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+      letter-spacing: 0.05em;
+    }
+    .header .badge::before { content: '✦'; font-size: 10px; }
+    .header h1 {
+      font-size: clamp(28px, 5vw, 48px);
+      font-weight: 900;
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+    .header p {
+      color: var(--text-secondary);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* API Config */
+    .api-config {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 32px;
+      animation: fadeInUp 0.6s ease 0.1s both;
+    }
+    .api-config-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .api-config-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .api-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+    .api-status-dot.inactive { background: var(--text-muted); box-shadow: none; animation: none; }
+    .toggle-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      transition: transform 0.3s;
+    }
+    .toggle-btn.open { transform: rotate(180deg); }
+    .api-fields {
+      display: none;
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .api-fields.hidden { display: none; }
+    .api-field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .api-field input {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: 'Inter', monospace;
+      font-size: 12px;
+      padding: 10px 12px;
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .api-field input:focus { border-color: var(--accent-green); }
+    @media (max-width: 600px) { .api-fields { grid-template-columns: 1fr; } }
+
+    /* Input Area */
+    .input-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 24px;
+      animation: fadeInUp 0.6s ease 0.2s both;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      background: rgba(0,0,0,0.3);
+      border-radius: var(--radius-sm);
+      padding: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--gradient-main);
+      color: white;
+      box-shadow: 0 4px 15px rgba(0,208,132,0.3);
+    }
+
+    /* Image Upload */
+    .upload-zone {
+      border: 2px dashed var(--border-bright);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent-green);
+      background: var(--accent-green-dim);
+      transform: translateY(-2px);
+    }
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .upload-icon { font-size: 48px; margin-bottom: 12px; }
+    .upload-zone h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .upload-zone p { font-size: 13px; color: var(--text-secondary); }
+    .preview-img {
+      max-width: 100%;
+      max-height: 220px;
+      border-radius: var(--radius-sm);
+      object-fit: contain;
+      margin: 0 auto;
+      display: none;
+    }
+
+    /* URL Input */
+    .url-input-wrap {
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .url-input {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 14px 16px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .url-input:focus { border-color: var(--accent-green); }
+    .url-input::placeholder { color: var(--text-muted); }
+
+    /* Product Description */
+    .desc-textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 14px 16px;
+      min-height: 140px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+      line-height: 1.6;
+    }
+    .desc-textarea:focus { border-color: var(--accent-green); }
+    .desc-textarea::placeholder { color: var(--text-muted); }
+
+    /* Analyze Button */
+    .analyze-btn {
+      width: 100%;
+      margin-top: 20px;
+      padding: 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--gradient-main);
+      color: white;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .analyze-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,208,132,0.4);
+    }
+    .analyze-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .analyze-btn .btn-inner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    .spinner {
+      display: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* Options Row */
+    .options-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .option-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .option-chip.active {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      background: var(--accent-green-dim);
+    }
+    .option-chip input { display: none; }
+
+    /* Progress Steps */
+    .progress-section {
+      display: none;
+      margin-bottom: 24px;
+      animation: fadeInUp 0.4s ease;
+    }
+    .progress-steps {
+      display: flex;
+      gap: 0;
+      position: relative;
+    }
+    .progress-steps::before {
+      content: '';
+      position: absolute;
+      top: 14px;
+      left: 28px;
+      right: 28px;
+      height: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+    .progress-track {
+      position: absolute;
+      top: 14px;
+      left: 28px;
+      height: 2px;
+      background: var(--gradient-main);
+      z-index: 1;
+      transition: width 0.5s ease;
+      width: 0%;
+    }
+    .step {
+      flex: 1;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+    }
+    .step-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: var(--bg-primary);
+      margin: 0 auto 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      transition: all 0.3s;
+    }
+    .step.active .step-dot {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      box-shadow: 0 0 12px rgba(0,208,132,0.5);
+    }
+    .step.done .step-dot {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: white;
+    }
+    .step-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .step.active .step-label { color: var(--accent-green); }
+    .step.done .step-label { color: var(--text-secondary); }
+
+    /* Log Box */
+    .log-box {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-size: 12px;
+      font-family: 'Inter', monospace;
+      color: var(--text-secondary);
+      margin-top: 16px;
+      min-height: 48px;
+      line-height: 1.6;
+    }
+    .log-line { opacity: 0; animation: fadeIn 0.3s ease forwards; }
+    .log-line.success { color: var(--accent-green); }
+    .log-line.info { color: var(--accent-blue); }
+    .log-line.warn { color: var(--accent-orange); }
+
+    /* Results Section */
+    .results-section {
+      display: none;
+      animation: fadeInUp 0.5s ease;
+    }
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: gap;
+      gap: 12px;
+    }
+    .results-title {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .results-meta {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+    .results-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .action-btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-bright);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .action-btn:hover {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      background: var(--accent-green-dim);
+    }
+
+    /* Filter Tabs */
+    .filter-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .filter-chip {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-chip.active, .filter-chip:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      background: var(--accent-blue-dim);
+    }
+
+    /* Keyword Cards Grid */
+    .keywords-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+    }
+    .keyword-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      transition: all 0.25s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      animation: cardIn 0.4s ease both;
+    }
+    .keyword-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--gradient-main);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .keyword-card:hover {
+      border-color: var(--border-bright);
+      background: var(--bg-card-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    .keyword-card:hover::before { opacity: 1; }
+    .keyword-card.copied { border-color: var(--accent-green); }
+
+    .kw-rank {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+    .kw-rank.top { color: var(--accent-orange); }
+
+    .kw-category {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-blue);
+      margin-bottom: 6px;
+    }
+
+    .kw-word {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      word-break: keep-all;
+    }
+
+    .kw-reason {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .kw-metrics {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .kw-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .kw-badge.volume {
+      background: rgba(0,208,132,0.12);
+      color: var(--accent-green);
+      border: 1px solid rgba(0,208,132,0.2);
+    }
+    .kw-badge.competition {
+      background: rgba(59,130,246,0.12);
+      color: var(--accent-blue);
+      border: 1px solid rgba(59,130,246,0.2);
+    }
+    .kw-badge.competition.high {
+      background: rgba(245,158,11,0.12);
+      color: var(--accent-orange);
+      border: 1px solid rgba(245,158,11,0.2);
+    }
+    .kw-badge.trend {
+      background: rgba(139,92,246,0.12);
+      color: var(--accent-purple);
+      border: 1px solid rgba(139,92,246,0.2);
+    }
+
+    .kw-copy-hint {
+      position: absolute;
+      bottom: 10px;
+      right: 12px;
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .keyword-card:hover .kw-copy-hint { opacity: 1; }
+
+    /* Summary Box */
+    .summary-box {
+      background: var(--gradient-card);
+      border: 1px solid rgba(0,208,132,0.15);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+    .summary-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-green);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+    .summary-text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    /* Naver Copy Box */
+    .naver-copy-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-top: 24px;
+    }
+    .naver-copy-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .naver-icon {
+      background: var(--naver-green);
+      color: white;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .naver-keywords-text {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-size: 13px;
+      color: var(--text-primary);
+      line-height: 1.8;
+      word-break: keep-all;
+      min-height: 60px;
+    }
+    .copy-all-btn {
+      margin-top: 12px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: var(--naver-green);
+      color: white;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .copy-all-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--accent-green);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Animations */
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .keywords-grid { grid-template-columns: 1fr; }
+      .results-header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+  <div class="bg-orb bg-orb-3"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="badge">AI 키워드 분석 엔진</div>
+      <h1>스마트스토어<br>키워드 자동 추출기</h1>
+      <p>상품 이미지 또는 URL을 분석해 실검색율 높은 키워드를 자동으로 뽑아드립니다</p>
+    </div>
+
+    <!-- API Config -->
+    <div class="api-config">
+      <div class="api-config-header" onclick="toggleApiConfig()">
+        <div class="api-config-title">
+          <div class="api-status-dot" id="apiStatusDot"></div>
+          <span id="apiStatusText">API 키 설정됨 · 클릭하여 수정</span>
+        </div>
+        <button class="toggle-btn" id="toggleBtn">▾</button>
+      </div>
+      <div class="api-fields" id="apiFields">
+        <div class="api-field">
+          <label>Google Gemini API Key (필수)</label>
+          <input type="password" id="geminiKey" placeholder="AIzaSy..." autocomplete="off">
+        </div>
+        <div class="api-field">
+          <label>Naver DataLab Client ID (선택)</label>
+          <input type="text" id="naverClientId" placeholder="네이버 Client ID" autocomplete="off">
+        </div>
+        <div class="api-field">
+          <label>Naver DataLab Client Secret (선택)</label>
+          <input type="password" id="naverClientSecret" placeholder="네이버 Client Secret" autocomplete="off">
+        </div>
+        <div class="api-field" style="grid-column: 1 / -1;">
+          <label style="color:var(--accent-orange);">── 네이버 검색광고 API (실제 검색량 조회) ──</label>
+        </div>
+        <div class="api-field">
+          <label>네이버 검색광고 Access License</label>
+          <input type="text" id="naverAdAccess" placeholder="Access License" autocomplete="off">
+        </div>
+        <div class="api-field">
+          <label>네이버 검색광고 Secret Key</label>
+          <input type="password" id="naverAdSecret" placeholder="Secret Key" autocomplete="off">
+        </div>
+        <div class="api-field">
+          <label>네이버 검색광고 Customer ID</label>
+          <input type="text" id="naverAdCustomer" placeholder="Customer ID (숫자)" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Section -->
+    <div class="input-section">
+      <div class="tabs">
+        <button class="tab-btn active" id="tabImg" onclick="switchTab('image')">🖼️ 이미지 업로드</button>
+        <button class="tab-btn" id="tabUrl" onclick="switchTab('url')">🔗 상품 URL</button>
+        <button class="tab-btn" id="tabDesc" onclick="switchTab('desc')">✏️ 상품 설명</button>
+      </div>
+
+      <!-- Image Tab -->
+      <div id="imageTabContent">
+        <div class="upload-zone" id="uploadZone"
+             ondragover="handleDragOver(event)"
+             ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event)">
+          <input type="file" id="fileInput" accept="image/*" onchange="handleFileChange(event)">
+          <div id="uploadPrompt">
+            <div class="upload-icon">📦</div>
+            <h3>이미지를 드래그하거나 클릭하여 업로드</h3>
+            <p>JPG, PNG, WEBP 지원 · 최대 10MB</p>
+          </div>
+          <img id="previewImg" class="preview-img" alt="상품 미리보기">
+        </div>
+      </div>
+
+      <!-- URL Tab -->
+      <div class="url-tab-content" id="urlTabContent">
+        <div class="url-input-wrap">
+          <input type="url" class="url-input" id="urlInput"
+            placeholder="https://smartstore.naver.com/... 또는 쿠팡, 올리브영 등 상품 URL">
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:10px;">
+          💡 네이버 스마트스토어, 쿠팡, 올리브영, 무신사 등 대부분의 쇼핑 URL 지원
+        </p>
+      </div>
+
+      <!-- Desc Tab -->
+      <div class="desc-tab-content" id="descTabContent">
+        <textarea class="desc-textarea" id="descInput"
+          placeholder="상품명, 소재, 색상, 용도, 타겟 등 상품에 대해 자유롭게 설명해 주세요.&#10;&#10;예시) 여성 봄 가을 가디건, 부드러운 니트 소재, 오버핏, 베이지 아이보리 계열, 데일리룩 출근룩 가능"></textarea>
+      </div>
+
+      <!-- Options -->
+      <div class="options-row">
+        <label class="option-chip active" id="optShopping">
+          <input type="checkbox" id="chkShopping" checked onchange="toggleOption('optShopping')"> 🛒 쇼핑 키워드
+        </label>
+        <label class="option-chip active" id="optLong">
+          <input type="checkbox" id="chkLong" checked onchange="toggleOption('optLong')"> 🔍 롱테일 키워드
+        </label>
+        <label class="option-chip active" id="optSeason">
+          <input type="checkbox" id="chkSeason" checked onchange="toggleOption('optSeason')"> 📅 시즌 키워드
+        </label>
+        <label class="option-chip" id="optBrand">
+          <input type="checkbox" id="chkBrand" onchange="toggleOption('optBrand')"> ⭐ 브랜드 연관
+        </label>
+      </div>
+
+      <button class="analyze-btn" id="analyzeBtn" onclick="startAnalysis()">
+        <div class="btn-inner">
+          <div class="spinner" id="spinner"></div>
+          <span id="btnText">✨ AI 키워드 분석 시작</span>
+        </div>
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section" id="progressSection">
+      <div class="progress-steps">
+        <div class="progress-track" id="progressTrack"></div>
+        <div class="step" id="step1">
+          <div class="step-dot">1</div>
+          <div class="step-label">상품 분석</div>
+        </div>
+        <div class="step" id="step2">
+          <div class="step-dot">2</div>
+          <div class="step-label">키워드 생성</div>
+        </div>
+        <div class="step" id="step3">
+          <div class="step-dot">3</div>
+          <div class="step-label">검색량 평가</div>
+        </div>
+        <div class="step" id="step4">
+          <div class="step-dot">4</div>
+          <div class="step-label">결과 정렬</div>
+        </div>
+      </div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-section" id="resultsSection">
+      <div class="summary-box" id="summaryBox">
+        <div class="summary-title">🔍 AI 상품 분석 요약</div>
+        <div class="summary-text" id="summaryText"></div>
+      </div>
+
+      <div class="results-header">
+        <div>
+          <div class="results-title">추천 키워드 <span id="kwCount" style="color:var(--accent-green)">0</span>개</div>
+          <div class="results-meta" id="resultsMeta"></div>
+        </div>
+        <div class="results-actions">
+          <button class="action-btn" onclick="exportCSV()">📥 CSV 저장</button>
+          <button class="action-btn" onclick="resetAll()">🔄 재분석</button>
+        </div>
+      </div>
+
+      <div class="filter-row" id="filterRow">
+        <button class="filter-chip active" onclick="filterKeywords('all', this)">전체</button>
+      </div>
+
+      <div class="keywords-grid" id="keywordsGrid"></div>
+
+      <div class="naver-copy-section">
+        <div class="naver-copy-title">
+          <span class="naver-icon">N</span>
+          스마트스토어 태그 입력용 (쉼표 구분)
+        </div>
+        <div class="naver-keywords-text" id="naverKeywordsText"></div>
+        <button class="copy-all-btn" onclick="copyAllKeywords()">
+          📋 전체 키워드 복사
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ─── CONFIG ───────────────────────────────────────────────────────────────
+    const DEFAULT_GEMINI_KEY = '';
+    const DEFAULT_NAVER_ID   = 'i0bVseZly_xFvvvoK9An';
+    const DEFAULT_NAVER_SEC  = '';
+
+    let currentTab = 'image';
+    let uploadedImageBase64 = null;
+    let uploadedImageMime = 'image/jpeg';
+    let allKeywords = [];
+    let currentFilter = 'all';
+
+    // ─── INIT ─────────────────────────────────────────────────────────────────
+    window.onload = () => {
+      // localStorage에서 저장된 키 불러오기
+      document.getElementById('geminiKey').value = localStorage.getItem('geminiKey') || '';
+      document.getElementById('naverClientId').value = localStorage.getItem('naverClientId') || DEFAULT_NAVER_ID;
+      document.getElementById('naverClientSecret').value = localStorage.getItem('naverClientSecret') || DEFAULT_NAVER_SEC;
+      document.getElementById('naverAdAccess').value = localStorage.getItem('naverAdAccess') || '';
+      document.getElementById('naverAdSecret').value = localStorage.getItem('naverAdSecret') || '';
+      document.getElementById('naverAdCustomer').value = localStorage.getItem('naverAdCustomer') || '';
+      updateApiStatus();
+      // hide api fields by default
+      document.getElementById('apiFields').classList.add('hidden');
+
+      // 키 변경 시 자동 저장
+      document.getElementById('geminiKey').addEventListener('input', function() {
+        localStorage.setItem('geminiKey', this.value.trim());
+        updateApiStatus();
+      });
+      document.getElementById('naverClientId').addEventListener('input', function() {
+        localStorage.setItem('naverClientId', this.value.trim());
+      });
+      document.getElementById('naverClientSecret').addEventListener('input', function() {
+        localStorage.setItem('naverClientSecret', this.value.trim());
+      });
+      document.getElementById('naverAdAccess').addEventListener('input', function() {
+        localStorage.setItem('naverAdAccess', this.value.trim());
+      });
+      document.getElementById('naverAdSecret').addEventListener('input', function() {
+        localStorage.setItem('naverAdSecret', this.value.trim());
+      });
+      document.getElementById('naverAdCustomer').addEventListener('input', function() {
+        localStorage.setItem('naverAdCustomer', this.value.trim());
+      });
+    };
+
+    function updateApiStatus() {
+      const key = document.getElementById('geminiKey').value.trim();
+      const dot = document.getElementById('apiStatusDot');
+      const txt = document.getElementById('apiStatusText');
+      if (key) {
+        dot.classList.remove('inactive');
+        txt.textContent = 'API 키 설정됨 · 클릭하여 수정';
+      } else {
+        dot.classList.add('inactive');
+        txt.textContent = 'API 키 없음 · 클릭하여 입력';
+      }
+    }
+
+    let apiOpen = false;
+    function toggleApiConfig() {
+      apiOpen = !apiOpen;
+      const f = document.getElementById('apiFields');
+      const btn = document.getElementById('toggleBtn');
+      f.classList.toggle('hidden', !apiOpen);
+      btn.classList.toggle('open', apiOpen);
+      updateApiStatus();
+    }
+
+    // ─── TABS ─────────────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabBtnIds = { image: 'tabImg', url: 'tabUrl', desc: 'tabDesc' };
+      ['image','url','desc'].forEach(t => {
+        document.getElementById(tabBtnIds[t]).classList.toggle('active', t === tab);
+        const el = document.getElementById(`${t}TabContent`);
+        if (el) el.style.display = t === tab ? '' : 'none';
+      });
+    }
+
+    // ─── UPLOAD ───────────────────────────────────────────────────────────────
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('uploadZone').classList.add('drag-over');
+    }
+    function handleDragLeave(e) {
+      document.getElementById('uploadZone').classList.remove('drag-over');
+    }
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('uploadZone').classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) processFile(file);
+    }
+    function handleFileChange(e) {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+    }
+    function processFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        uploadedImageBase64 = e.target.result.split(',')[1];
+        uploadedImageMime = file.type;
+        const img = document.getElementById('previewImg');
+        img.src = e.target.result;
+        img.style.display = 'block';
+        document.getElementById('uploadPrompt').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ─── OPTIONS ──────────────────────────────────────────────────────────────
+    function toggleOption(id) {
+      const el = document.getElementById(id);
+      el.classList.toggle('active', document.getElementById(el.querySelector('input').id).checked);
+    }
+
+    // ─── ANALYSIS ─────────────────────────────────────────────────────────────
+    async function startAnalysis() {
+      const geminiKey = document.getElementById('geminiKey').value.trim() || DEFAULT_GEMINI_KEY;
+      if (!geminiKey) {
+        showToast('❌ Gemini API 키를 입력해 주세요', 'error');
+        return;
+      }
+
+      // Validate input
+      if (currentTab === 'image' && !uploadedImageBase64) {
+        showToast('📸 이미지를 업로드해 주세요'); return;
+      }
+      if (currentTab === 'url' && !document.getElementById('urlInput').value.trim()) {
+        showToast('🔗 URL을 입력해 주세요'); return;
+      }
+      if (currentTab === 'desc' && !document.getElementById('descInput').value.trim()) {
+        showToast('✏️ 상품 설명을 입력해 주세요'); return;
+      }
+
+      // UI: loading state
+      const btn = document.getElementById('analyzeBtn');
+      btn.disabled = true;
+      document.getElementById('spinner').style.display = 'block';
+      document.getElementById('btnText').textContent = '분석 중...';
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('progressSection').style.display = 'block';
+      document.getElementById('logBox').innerHTML = '';
+      allKeywords = [];
+
+      setStep(1, 'active');
+      addLog('🔍 상품 이미지/정보 분석 중...', 'info');
+
+      try {
+        // Step 1: Analyze product with Gemini
+        const { summary, categories, rawKeywords } = await analyzeWithGemini(geminiKey);
+        setStep(1, 'done'); setStep(2, 'active');
+        addLog(`✅ 상품 분석 완료: ${summary.slice(0,40)}...`, 'success');
+        addLog(`🏷️ 키워드 후보 ${rawKeywords.length}개 생성됨`, 'info');
+
+        // Step 2: Evaluate keywords
+        setStep(2, 'done'); setStep(3, 'active');
+        addLog('📊 검색량 및 경쟁도 평가 중...', 'info');
+        const scored = await scoreKeywordsWithGemini(geminiKey, rawKeywords, summary);
+        setStep(3, 'done'); setStep(4, 'active');
+        addLog(`✅ 평가 완료 · 상위 키워드 선별 중...`, 'success');
+
+        // Step 3: Sort and display
+        allKeywords = scored.sort((a, b) => b.score - a.score);
+        addLog(`🎉 총 ${allKeywords.length}개 키워드 추출 완료!`, 'success');
+        setStep(4, 'done');
+        updateProgressTrack(100);
+
+        await sleep(400);
+        renderResults(summary, allKeywords);
+
+      } catch (err) {
+        addLog(`❌ 오류: ${err.message}`, 'warn');
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('btnText').textContent = '✨ AI 키워드 분석 시작';
+      }
+    }
+
+    async function analyzeWithGemini(apiKey) {
+      const opts = {
+        shopping: document.getElementById('chkShopping').checked,
+        longTail: document.getElementById('chkLong').checked,
+        season: document.getElementById('chkSeason').checked,
+        brand: document.getElementById('chkBrand').checked,
+      };
+
+      let promptText = `당신은 네이버 스마트스토어 상품 키워드 전문 마케터입니다.
+
+아래 상품을 분석하여 JSON 형식으로 응답해 주세요.
+
+요구사항:
+- 네이버 쇼핑 실검색률이 높은 키워드 위주로 추출
+- 한국어 키워드만 사용
+- 상품명, 소재, 색상, 용도, 타겟, 계절, 스타일 등 다각도로 생성
+${opts.shopping ? '- 쇼핑 검색 의도 키워드 포함 (예: "구매", "추천", "가격")' : ''}
+${opts.longTail ? '- 롱테일 키워드 포함 (예: "30대여성 가을 데일리룩 원피스")' : ''}
+${opts.season ? '- 현재 시즌(봄) 관련 키워드 포함' : ''}
+${opts.brand ? '- 경쟁 브랜드 연관 키워드 포함' : ''}
+
+반드시 아래 JSON 형식만 출력하세요 (다른 텍스트 없이):
+{
+  "summary": "상품 핵심 설명 (2~3문장)",
+  "categories": ["카테고리1", "카테고리2"],
+  "keywords": [
+    {
+      "word": "키워드",
+      "category": "카테고리명",
+      "reason": "이 키워드를 추천하는 이유 (1줄)",
+      "searchVolume": "높음|보통|낮음",
+      "competition": "높음|보통|낮음",
+      "trend": "상승|유지|하락"
+    }
+  ]
+}
+
+keywords 배열에 최소 20개 이상의 키워드를 포함하세요.`;
+
+      let parts = [];
+
+      if (currentTab === 'image') {
+        parts = [
+          { text: promptText },
+          { inlineData: { mimeType: uploadedImageMime, data: uploadedImageBase64 } }
+        ];
+      } else if (currentTab === 'url') {
+        const url = document.getElementById('urlInput').value.trim();
+        parts = [{ text: `${promptText}\n\n분석할 상품 URL: ${url}` }];
+      } else {
+        const desc = document.getElementById('descInput').value.trim();
+        parts = [{ text: `${promptText}\n\n상품 설명:\n${desc}` }];
+      }
+
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          contents: [{ parts }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || `API 오류 (${response.status})`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Parse JSON from response
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('AI 응답 파싱 실패. 다시 시도해 주세요.');
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        // JSON이 잘린 경우 복구 시도: 마지막 완전한 객체까지만 파싱
+        let fixedJson = jsonMatch[0];
+        // 잘린 keywords 배열 복구: 마지막 완전한 } 찾아서 배열/객체 닫기
+        const lastComplete = fixedJson.lastIndexOf('}');
+        if (lastComplete > 0) {
+          fixedJson = fixedJson.substring(0, lastComplete + 1);
+          // 열린 배열/객체 닫기
+          const openBrackets = (fixedJson.match(/\[/g) || []).length - (fixedJson.match(/\]/g) || []).length;
+          const openBraces = (fixedJson.match(/\{/g) || []).length - (fixedJson.match(/\}/g) || []).length;
+          for (let i = 0; i < openBrackets; i++) fixedJson += ']';
+          for (let i = 0; i < openBraces; i++) fixedJson += '}';
+        }
+        try {
+          parsed = JSON.parse(fixedJson);
+        } catch (e2) {
+          throw new Error('AI 응답 JSON 파싱 실패. 다시 시도해 주세요.');
+        }
+      }
+      return {
+        summary: parsed.summary || '',
+        categories: parsed.categories || [],
+        rawKeywords: parsed.keywords || []
+      };
+    }
+
+    async function scoreKeywordsWithGemini(apiKey, keywords, summary) {
+      const naverAdAccess = document.getElementById('naverAdAccess').value.trim();
+      const naverAdSecret = document.getElementById('naverAdSecret').value.trim();
+      const naverAdCustomer = document.getElementById('naverAdCustomer').value.trim();
+
+      // 네이버 검색광고 API 키가 있으면 실제 검색량 조회
+      if (naverAdAccess && naverAdSecret && naverAdCustomer) {
+        try {
+          addLog('📡 네이버 검색광고 API로 실제 검색량 조회 중...', 'info');
+          const kwWords = keywords.map(k => k.word);
+          const res = await fetch('/api/search-volume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              accessLicense: naverAdAccess,
+              secretKey: naverAdSecret,
+              customerId: naverAdCustomer,
+              keywords: kwWords
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const volumeMap = {};
+            if (data.keywordList) {
+              data.keywordList.forEach(item => {
+                const total = (item.monthlyPcQcCnt === '< 10' ? 5 : Number(item.monthlyPcQcCnt) || 0)
+                            + (item.monthlyMobileQcCnt === '< 10' ? 5 : Number(item.monthlyMobileQcCnt) || 0);
+                volumeMap[item.relKeyword] = {
+                  total,
+                  pc: item.monthlyPcQcCnt,
+                  mobile: item.monthlyMobileQcCnt,
+                  competition: item.compIdx || '보통'
+                };
+              });
+            }
+
+            addLog(`✅ 검색량 데이터 ${Object.keys(volumeMap).length}개 키워드 조회 완료`, 'success');
+
+            // AI가 생성한 키워드에 실제 검색량 매칭
+            const results = keywords.map((kw, i) => {
+              const vol = volumeMap[kw.word];
+              if (vol) {
+                const volLabel = vol.total >= 5000 ? '높음' : vol.total >= 500 ? '보통' : '낮음';
+                const compLabel = vol.competition === 'HIGH' ? '높음' : vol.competition === 'LOW' ? '낮음' : '보통';
+                return {
+                  ...kw,
+                  searchVolume: volLabel,
+                  monthlySearch: vol.total,
+                  monthlyPc: vol.pc,
+                  monthlyMobile: vol.mobile,
+                  competition: compLabel,
+                  score: vol.total,
+                  rank: i + 1
+                };
+              }
+              // 검색량 못 찾은 키워드는 AI 추정값 유지
+              return { ...kw, monthlySearch: null, score: 0, rank: i + 1 };
+            });
+
+            // 네이버 API가 반환한 연관 키워드 중 AI가 안 뽑은 것도 추가
+            const aiWords = new Set(keywords.map(k => k.word));
+            Object.entries(volumeMap).forEach(([word, vol]) => {
+              if (!aiWords.has(word) && vol.total >= 100) {
+                const volLabel = vol.total >= 5000 ? '높음' : vol.total >= 500 ? '보통' : '낮음';
+                const compLabel = vol.competition === 'HIGH' ? '높음' : vol.competition === 'LOW' ? '낮음' : '보통';
+                results.push({
+                  word,
+                  category: '연관 키워드',
+                  reason: '네이버 검색광고 API 연관 키워드',
+                  searchVolume: volLabel,
+                  monthlySearch: vol.total,
+                  monthlyPc: vol.pc,
+                  monthlyMobile: vol.mobile,
+                  competition: compLabel,
+                  trend: '유지',
+                  score: vol.total,
+                  rank: 0
+                });
+              }
+            });
+
+            return results;
+          }
+        } catch (err) {
+          addLog(`⚠️ 네이버 검색량 조회 실패: ${err.message} (AI 추정값 사용)`, 'warn');
+        }
+      }
+
+      // 네이버 API 없으면 기존 AI 추정 방식
+      return keywords.map((kw, i) => {
+        const volScore = kw.searchVolume === '높음' ? 90 + Math.random()*10
+          : kw.searchVolume === '보통' ? 55 + Math.random()*25
+          : 20 + Math.random()*25;
+        return {
+          ...kw,
+          score: Math.round(volScore),
+          rank: i + 1
+        };
+      });
+    }
+
+    // ─── RENDER ───────────────────────────────────────────────────────────────
+    function renderResults(summary, keywords) {
+      document.getElementById('progressSection').style.display = 'none';
+      document.getElementById('resultsSection').style.display = 'block';
+
+      // Summary
+      document.getElementById('summaryText').textContent = summary;
+
+      // Count
+      document.getElementById('kwCount').textContent = keywords.length;
+      document.getElementById('resultsMeta').textContent =
+        `Gemini AI 분석 기준 · 검색량 높은 순 정렬 · ${new Date().toLocaleDateString('ko-KR')} 기준`;
+
+      // Filters
+      const cats = [...new Set(keywords.map(k => k.category))];
+      const filterRow = document.getElementById('filterRow');
+      filterRow.innerHTML = `<button class="filter-chip active" onclick="filterKeywords('all', this)">전체 (${keywords.length})</button>`;
+      cats.forEach(cat => {
+        const cnt = keywords.filter(k => k.category === cat).length;
+        filterRow.innerHTML += `<button class="filter-chip" onclick="filterKeywords('${cat}', this)">${cat} (${cnt})</button>`;
+      });
+
+      // Cards
+      renderCards(keywords);
+
+      // Naver copy text
+      const naverText = keywords.slice(0, 20).map(k => k.word).join(', ');
+      document.getElementById('naverKeywordsText').textContent = naverText;
+
+      // Scroll to results
+      document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function renderCards(keywords) {
+      const grid = document.getElementById('keywordsGrid');
+      grid.innerHTML = '';
+      keywords.forEach((kw, i) => {
+        const delay = Math.min(i * 0.04, 0.8);
+        const isTop = kw.score >= 85;
+        const compClass = kw.competition === '높음' ? 'high' : '';
+
+        grid.innerHTML += `
+          <div class="keyword-card" onclick="copyKeyword('${kw.word}', this)"
+               style="animation-delay: ${delay}s"
+               data-category="${kw.category}">
+            <div class="kw-rank ${isTop ? 'top' : ''}">${isTop ? '🔥' : '#'}${i+1}</div>
+            <div class="kw-category">${kw.category}</div>
+            <div class="kw-word">${kw.word}</div>
+            <div class="kw-reason">${kw.reason}</div>
+            <div class="kw-metrics">
+              <span class="kw-badge volume">🔍 ${kw.monthlySearch != null ? '월 ' + Number(kw.monthlySearch).toLocaleString() + '회' : '검색량 ' + kw.searchVolume}</span>
+              <span class="kw-badge competition ${compClass}">⚡ 경쟁도 ${kw.competition}</span>
+              ${kw.trend ? `<span class="kw-badge trend">${kw.trend === '상승' ? '📈' : kw.trend === '하락' ? '📉' : '➡️'} ${kw.trend}</span>` : ''}
+            </div>
+            <div class="kw-copy-hint">클릭하여 복사</div>
+          </div>`;
+      });
+    }
+
+    function filterKeywords(cat, btn) {
+      currentFilter = cat;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      const filtered = cat === 'all' ? allKeywords : allKeywords.filter(k => k.category === cat);
+      renderCards(filtered);
+    }
+
+    // ─── COPY & EXPORT ────────────────────────────────────────────────────────
+    function copyKeyword(word, el) {
+      navigator.clipboard.writeText(word).then(() => {
+        el.classList.add('copied');
+        setTimeout(() => el.classList.remove('copied'), 1500);
+        showToast(`✅ "${word}" 복사 완료!`);
+      });
+    }
+
+    function copyAllKeywords() {
+      const text = document.getElementById('naverKeywordsText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('✅ 전체 키워드 복사 완료!');
+      });
+    }
+
+    function exportCSV() {
+      const headers = ['순위', '키워드', '카테고리', '월간검색량', 'PC검색량', '모바일검색량', '검색량등급', '경쟁도', '트렌드', '추천이유'];
+      const rows = allKeywords.map((k, i) =>
+        [i+1, k.word, k.category, k.monthlySearch||'', k.monthlyPc||'', k.monthlyMobile||'', k.searchVolume, k.competition, k.trend, k.reason]
+          .map(v => `"${String(v).replace(/"/g,'""')}"`)
+          .join(',')
+      );
+      const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `스마트스토어_키워드_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('📥 CSV 파일 저장 완료!');
+    }
+
+    function resetAll() {
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('progressSection').style.display = 'none';
+      uploadedImageBase64 = null;
+      const img = document.getElementById('previewImg');
+      img.style.display = 'none';
+      img.src = '';
+      document.getElementById('uploadPrompt').style.display = '';
+      document.getElementById('fileInput').value = '';
+      document.getElementById('urlInput').value = '';
+      document.getElementById('descInput').value = '';
+      allKeywords = [];
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ─── PROGRESS ─────────────────────────────────────────────────────────────
+    function setStep(n, state) {
+      const el = document.getElementById(`step${n}`);
+      el.className = `step ${state}`;
+      if (state === 'done') el.querySelector('.step-dot').textContent = '✓';
+      const pct = { 1: 0, 2: 33, 3: 66, 4: 100 }[n] - (state === 'active' ? 10 : 0);
+      updateProgressTrack(Math.max(0, pct));
+    }
+    function updateProgressTrack(pct) {
+      document.getElementById('progressTrack').style.width = pct + '%';
+    }
+    function addLog(msg, type = '') {
+      const box = document.getElementById('logBox');
+      const line = document.createElement('div');
+      line.className = `log-line ${type}`;
+      line.textContent = `[${new Date().toLocaleTimeString('ko-KR')}] ${msg}`;
+      box.appendChild(line);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // ─── UTILS ────────────────────────────────────────────────────────────────
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // Init tab visibility
+    document.getElementById('urlTabContent').style.display = 'none';
+    document.getElementById('descTabContent').style.display = 'none';
+  </script>
+</body>
+</html>

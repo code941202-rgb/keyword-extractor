@@ -1,0 +1,19 @@
+{
+  "name": "keyword-extractor",
+  "version": "1.0.0",
+  "description": "스마트스토어 키워드 추출기",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "crypto-js": "^4.2.0"
+  }
+}
