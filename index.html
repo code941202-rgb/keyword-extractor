@@ -1192,7 +1192,26 @@ keywords 배열에 최소 20개 이상의 키워드를 포함하세요.`;
         ];
       } else if (currentTab === 'url') {
         const url = document.getElementById('urlInput').value.trim();
-        parts = [{ text: `${promptText}\n\n분석할 상품 URL: ${url}` }];
+        // 서버에서 URL 크롤링하여 실제 상품 정보 가져오기
+        addLog('🌐 상품 페이지 크롤링 중...', 'info');
+        try {
+          const crawlRes = await fetch('/api/crawl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+          });
+          if (crawlRes.ok) {
+            const crawlData = await crawlRes.json();
+            addLog(`✅ 상품 정보 수집 완료: ${crawlData.info?.title?.slice(0,30) || 'OK'}`, 'success');
+            parts = [{ text: `${promptText}\n\n아래는 실제 상품 페이지에서 수집한 정보입니다:\n${crawlData.productText}` }];
+          } else {
+            addLog('⚠️ 크롤링 실패, URL만으로 분석합니다', 'warn');
+            parts = [{ text: `${promptText}\n\n분석할 상품 URL: ${url}` }];
+          }
+        } catch (err) {
+          addLog('⚠️ 크롤링 실패, URL만으로 분석합니다', 'warn');
+          parts = [{ text: `${promptText}\n\n분석할 상품 URL: ${url}` }];
+        }
       } else {
         const desc = document.getElementById('descInput').value.trim();
         parts = [{ text: `${promptText}\n\n상품 설명:\n${desc}` }];

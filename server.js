@@ -3,11 +3,88 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const path = require('path');
+const cheerio = require('cheerio');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname)));
+
+// ─── URL 크롤링 API ─────────────────────────────────────────────────────────
+app.post('/api/crawl', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'URL이 필요합니다.' });
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
+      },
+      redirect: 'follow'
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `페이지 로드 실패 (${response.status})` });
+    }
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    // 다양한 쇼핑몰에서 상품 정보 추출
+    const info = {
+      title: '',
+      description: '',
+      price: '',
+      category: '',
+      details: ''
+    };
+
+    // 제목 추출
+    info.title = $('meta[property="og:title"]').attr('content')
+      || $('meta[name="title"]').attr('content')
+      || $('title').text()
+      || '';
+
+    // 설명 추출
+    info.description = $('meta[property="og:description"]').attr('content')
+      || $('meta[name="description"]').attr('content')
+      || '';
+
+    // 가격 추출
+    info.price = $('meta[property="product:price:amount"]').attr('content')
+      || $('[class*="price"]').first().text().trim()
+      || '';
+
+    // 카테고리 추출
+    info.category = $('meta[property="product:category"]').attr('content')
+      || $('[class*="category"]').first().text().trim()
+      || '';
+
+    // 상품 상세 텍스트 추출 (본문에서 텍스트만)
+    $('script, style, nav, header, footer').remove();
+    const bodyText = $('body').text().replace(/\s+/g, ' ').trim().substring(0, 3000);
+    info.details = bodyText;
+
+    // 키워드 메타태그
+    const keywords = $('meta[name="keywords"]').attr('content') || '';
+
+    const productText = [
+      info.title && `상품명: ${info.title}`,
+      info.description && `설명: ${info.description}`,
+      info.price && `가격: ${info.price}`,
+      info.category && `카테고리: ${info.category}`,
+      keywords && `키워드: ${keywords}`,
+      info.details && `페이지 내용: ${info.details.substring(0, 2000)}`
+    ].filter(Boolean).join('\n');
+
+    res.json({ productText, info });
+  } catch (err) {
+    console.error('크롤링 오류:', err.message);
+    res.status(500).json({ error: `크롤링 실패: ${err.message}` });
+  }
+});
 
 // ─── Gemini API 프록시 ──────────────────────────────────────────────────────
 app.post('/api/analyze', async (req, res) => {
